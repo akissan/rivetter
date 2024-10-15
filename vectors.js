@@ -1,7 +1,7 @@
 export class Point {
   constructor(x, y) {
-    this.x = x;
-    this.y = y;
+    this.x = Math.round(x);
+    this.y = Math.round(y);
   }
 
   static fromMouse(cnv) {

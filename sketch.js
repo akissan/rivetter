@@ -13,11 +13,11 @@ let activeRB = null;
 // const FrozenPoint = [];
 
 class RivetManager {
-  constructor(activeLayer, frozenLayer) {
+  constructor(activeLayer, frozenLayer, mainCanvas) {
     this.rivetboxes = [];
     this.activeCnv = activeLayer;
     this.frozenCnv = frozenLayer;
-    // this.mainCanvas;
+    this.mainCanvas = mainCanvas;
   }
 
   addRB(RB) {
@@ -38,26 +38,22 @@ class RivetManager {
     newRB.addSegment(S2S, S2E);
 
     this.addRB(newRB);
-    this.printList();
-  }
-
-  printList() {
-    for (const RB of this.rivetboxes) {
-      print(RB);
-    }
   }
 
   drawList() {
     this.activeCnv.clear();
 
     for (const RB of this.rivetboxes) {
-      RB.drawSegments(this.activeCnv);
+      RB.drawBoundBox(this.mainCanvas);
+      RB.drawSegments(this.mainCanvas);
     }
   }
 }
 
 class ViewportControls {
-  constructor() {
+  constructor(textureSize, canvasSize) {
+    this.textureSize = textureSize;
+    this.canvasSize = canvasSize;
     this.reset();
   }
 
@@ -65,9 +61,35 @@ class ViewportControls {
     this.offset = { x: 50, y: 50 };
     this.zoom = 100;
   }
+
+  get viewport() {
+    const sw = this.textureSize / (this.zoom * 0.01);
+    const sx = this.offset.x * 0.01 * this.textureSize - 0.5 * sw;
+    const sh = sw;
+    const sy = this.offset.y * 0.01 * this.textureSize - 0.5 * sh;
+    return { sx, sy, sw, sh };
+  }
+
+  mapToTexture(canvasPoint, viewportData = this.viewport) {
+    const { sx, sy, sw, sh } = viewportData;
+
+    const tx = sx + (canvasPoint.x / canvasSize) * sw;
+    const ty = sy + (canvasPoint.y / canvasSize) * sh;
+
+    return new Point(tx, ty);
+  }
+
+  mapToViewport(texturePoint, viewportData = this.viewport) {
+    const { sx, sy, sw, sh } = viewportData;
+
+    const cx = ((texturePoint.x - sx) / sw) * this.canvasSize;
+    const cy = ((texturePoint.y - sy) / sh) * this.canvasSize;
+
+    return new Point(cx, cy);
+  }
 }
 
-const CC = new ViewportControls();
+const CC = new ViewportControls(textureSize, canvasSize);
 let RM = null;
 
 let frozenLayer;
@@ -78,8 +100,6 @@ const maincnv = function (cnv) {
     compass_base = cnv.loadImage("cbt.png");
   };
 
-  const circles = [];
-
   cnv.setup = function () {
     const mainCanvas = cnv.createCanvas(canvasSize, canvasSize);
     mainCanvas.parent("canvas_container");
@@ -87,19 +107,14 @@ const maincnv = function (cnv) {
     activeLayer = cnv.createGraphics(textureSize, textureSize);
     activeLayer.strokeWeight("2");
 
-    RM = new RivetManager(activeLayer, frozenLayer);
-
-    for (let i = 0; i < 1000; i += 1) {
-      circles.push(
-        new Point(cnv.random(0, textureSize), cnv.random(0, textureSize))
-      );
-    }
+    RM = new RivetManager(activeLayer, frozenLayer, cnv);
+    cnv.CC = CC;
 
     cnv.textAlign(cnv.RIGHT, cnv.TOP);
     cnv.textSize(16);
 
-    // RM.printList();
     RM.initRivetBox(new Point(300, 300));
+    // redrawActive();
   };
 
   function redrawFrozen() {
@@ -116,8 +131,12 @@ const maincnv = function (cnv) {
   cnv.keyPressed = function () {
     switch (cnv.key) {
       case "a":
-        // print(cnv.mouseX, cnv.mouseY);!== undefined ? initPoint :
-        RM.initRivetBox(Point.fromMouse(cnv));
+        const P = CC.mapToTexture(Point.fromMouse(cnv));
+        RM.initRivetBox(P);
+        break;
+
+      case "b":
+        redrawActive();
         break;
     }
     return false;
@@ -125,19 +144,17 @@ const maincnv = function (cnv) {
 
   cnv.draw = function () {
     const start_timing = cnv.millis();
-    redrawActive();
 
     cnv.background("#182330");
 
-    const sw = textureSize / (CC.zoom * 0.01);
-    const sx = CC.offset.x * 0.01 * textureSize - 0.5 * sw;
+    // const { sx, sy, sw, sh } = CC.viewport;
 
-    const sh = sw;
-    const sy = CC.offset.y * 0.01 * textureSize - 0.5 * sh;
+    // cnv.image(compass_base, 0, 0, canvasSize, canvasSize, sx, sy, sw, sh);
+    // cnv.image(frozenLayer, 0, 0, canvasSize, canvasSize, sx, sy, sw, sh);
+    // cnv.image(activeLayer, 0, 0, canvasSize, canvasSize, sx, sy, sw, sh);
 
-    cnv.image(compass_base, 0, 0, canvasSize, canvasSize, sx, sy, sw, sh);
-    cnv.image(frozenLayer, 0, 0, canvasSize, canvasSize, sx, sy, sw, sh);
-    cnv.image(activeLayer, 0, 0, canvasSize, canvasSize, sx, sy, sw, sh);
+    cnv.strokeWeight(2);
+    redrawActive();
 
     const end_timing = cnv.millis();
     cnv.text(`${end_timing - start_timing}`, canvasSize, 10);
