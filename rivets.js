@@ -2,13 +2,25 @@ import { Point } from "./vectors.js";
 import { createPutCircle, createPutVertex } from "./drawing.js";
 
 export class RivetBox {
-  constructor() {
+  constructor(cnv) {
     this.segments = [];
     this.xdiv = 5;
     this.ydiv = 7;
     this.isActive = false;
     this.id = Math.floor(Math.random() * 10000);
     this._boundBox = null;
+    this.cnv = cnv;
+    this.element = this.initRBElement();
+  }
+
+  initRBElement() {
+    const rbelement = this.cnv.createDiv();
+    const label = this.cnv.createP(this.id);
+    // label.parent
+    label.parent(rbelement);
+    rbelement.parent("rb_list");
+
+    return rbelement;
   }
 
   addSegment(startPoint, endPoint) {
@@ -117,3 +129,10 @@ export class Segment {
     this.end = endPoint;
   }
 }
+
+// export class RivetBoxElement {
+//   constructor(RivetBox, ) {
+//     this.RivetBox = RivetBox;
+
+//   }
+// }

@@ -14,7 +14,7 @@ let activeRB = null;
 
 class RivetManager {
   constructor(activeLayer, frozenLayer, mainCanvas) {
-    this.rivetboxes = [];
+    this.rivetboxes = new Map();
     this.activeCnv = activeLayer;
     this.frozenCnv = frozenLayer;
     this.mainCanvas = mainCanvas;
@@ -22,13 +22,13 @@ class RivetManager {
 
   addRB(RB) {
     activeRB = RB;
-    this.rivetboxes.push(RB);
+    this.rivetboxes.set(RB.id, RB);
   }
 
   initRivetBox(initPoint) {
-    const newRB = new RivetBox();
+    const newRB = new RivetBox(this.mainCanvas);
     const baseRBSize = 20;
-
+    // segment_list;
     const mouseP = initPoint;
     const mousePE = mouseP.addVec(new Vector(0, baseRBSize));
     const S2S = mouseP.addVec(new Vector(baseRBSize, 0));
@@ -43,10 +43,10 @@ class RivetManager {
   drawList() {
     this.activeCnv.clear();
 
-    for (const RB of this.rivetboxes) {
+    this.rivetboxes.forEach((RB) => {
       RB.drawBoundBox(this.mainCanvas);
       RB.drawSegments(this.mainCanvas);
-    }
+    });
   }
 }
 
@@ -147,11 +147,11 @@ const maincnv = function (cnv) {
 
     cnv.background("#182330");
 
-    // const { sx, sy, sw, sh } = CC.viewport;
+    const { sx, sy, sw, sh } = CC.viewport;
 
-    // cnv.image(compass_base, 0, 0, canvasSize, canvasSize, sx, sy, sw, sh);
-    // cnv.image(frozenLayer, 0, 0, canvasSize, canvasSize, sx, sy, sw, sh);
-    // cnv.image(activeLayer, 0, 0, canvasSize, canvasSize, sx, sy, sw, sh);
+    cnv.image(compass_base, 0, 0, canvasSize, canvasSize, sx, sy, sw, sh);
+    cnv.image(frozenLayer, 0, 0, canvasSize, canvasSize, sx, sy, sw, sh);
+    cnv.image(activeLayer, 0, 0, canvasSize, canvasSize, sx, sy, sw, sh);
 
     cnv.strokeWeight(2);
     redrawActive();
