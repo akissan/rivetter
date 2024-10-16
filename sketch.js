@@ -1,5 +1,5 @@
 import { RivetBox } from "./rivets.js";
-import { Point, Vector } from "./vectors.js";
+import { Point, RivetControlPoint, Vector } from "./vectors.js";
 import { isMouseInBox } from "./utils.js";
 
 let compass_base;
@@ -11,6 +11,38 @@ window.print = console.log;
 
 let activeRB = null;
 // const FrozenPoint = [];
+
+let mouseMode = null;
+const MOUSE_MODE_POINT_DRAG = 10;
+const MOUSE_MODE_DEFAULT = 20;
+const MOUSE_MODE_MULTIPLE_SELECTION = 30;
+mouseMode = MOUSE_MODE_DEFAULT;
+
+class Selection extends Map {
+  unselectAll() {
+    this.forEach((v) => (v.selected = false));
+    this.clear();
+  }
+
+  unselect(id) {
+    const el = this.get(id);
+    el.selected = false;
+    this.delete(id);
+  }
+
+  select(value) {
+    value.selected = true;
+    this.set(value.id, value);
+  }
+
+  preview() {
+    const [val] = this.values();
+    return val;
+  }
+}
+const selection = new Selection();
+
+// window.selection = selection;
 
 class RivetManager {
   constructor(activeLayer, frozenLayer, mainCanvas) {
@@ -25,18 +57,28 @@ class RivetManager {
     this.rivetboxes.set(RB.id, RB);
   }
 
-  initRivetBox(initPoint) {
+  initRivetBox(initPoint, segments = 2) {
     const newRB = new RivetBox(this.mainCanvas);
-    const baseRBSize = 20;
+    const baseRBSize = 100;
     // segment_list;
-    const mouseP = initPoint;
-    const mousePE = mouseP.addVec(new Vector(0, baseRBSize));
-    const S2S = mouseP.addVec(new Vector(baseRBSize, 0));
-    const S2E = S2S.addVec(new Vector(0, baseRBSize));
-
+    const mouseP = new RivetControlPoint(initPoint, newRB);
+    const mousePE = new RivetControlPoint(
+      mouseP.addVec(new Vector(0, baseRBSize)),
+      newRB
+    );
     newRB.addSegment(mouseP, mousePE);
-    newRB.addSegment(S2S, S2E);
+    for (let i = 1; i < segments; i += 1) {
+      const S2S = new RivetControlPoint(
+        mouseP.addVec(new Vector(baseRBSize * i, 0)),
+        newRB
+      );
+      const S2E = new RivetControlPoint(
+        S2S.addVec(new Vector(0, baseRBSize)),
+        newRB
+      );
 
+      newRB.addSegment(S2S, S2E);
+    }
     this.addRB(newRB);
   }
 
@@ -44,6 +86,7 @@ class RivetManager {
     this.activeCnv.clear();
 
     this.rivetboxes.forEach((RB) => {
+      if (RB.needsUpdate) RB.update();
       RB.drawBoundBox(this.mainCanvas);
       RB.drawSegments(this.mainCanvas);
     });
@@ -95,9 +138,74 @@ let RM = null;
 let frozenLayer;
 let activeLayer;
 
+const MIN_SEARCH_DISTANCE = 5;
+const MAX_SEARCH_DISTANCE = 100;
+
+class SelectionCandidate {
+  constructor(P, dist) {
+    this.P = P;
+    this.dist = dist;
+  }
+}
+
 const maincnv = function (cnv) {
   cnv.preload = function () {
     compass_base = cnv.loadImage("cbt.png");
+  };
+
+  cnv.mousePressed = function () {
+    if (!isMouseInBox(cnv, canvasSize)) return;
+    const mousePos = CC.mapToTexture(Point.fromMouse(cnv));
+
+    if (mouseMode === MOUSE_MODE_DEFAULT) {
+      let selection_candidate = null;
+
+      RM.rivetboxes.forEach((RB) => {
+        RB.segments.forEach(({ points }) => {
+          points.forEach((p) => {
+            const toMouseDist = cnv.dist(p.x, p.y, mousePos.x, mousePos.y);
+            if (toMouseDist < MAX_SEARCH_DISTANCE) {
+              if (
+                !selection_candidate ||
+                toMouseDist < selection_candidate.dist
+              ) {
+                selection_candidate = new SelectionCandidate(p, toMouseDist);
+              }
+            }
+          });
+        });
+      });
+
+      if (selection_candidate) {
+        selection.unselectAll();
+        selection.select(selection_candidate.P);
+
+        // print(selection.preview());
+
+        // print(
+        //   `Selected ${selection.preview().id} ${selection.preview().x}:${
+        //     selection.preview().y
+        //   } - ${selection_candidate.dist}`
+        // );
+        mouseMode = MOUSE_MODE_POINT_DRAG;
+      }
+    }
+  };
+
+  cnv.mouseDragged = function () {
+    if (!isMouseInBox(cnv, canvasSize)) return;
+
+    if (mouseMode === MOUSE_MODE_POINT_DRAG) {
+      selection.forEach((p) => {
+        p.moveToMouse(cnv);
+      });
+    }
+  };
+
+  cnv.mouseReleased = function () {
+    if (mouseMode === MOUSE_MODE_POINT_DRAG) {
+      mouseMode = MOUSE_MODE_DEFAULT;
+    }
   };
 
   cnv.setup = function () {
@@ -124,17 +232,24 @@ const maincnv = function (cnv) {
   }
 
   function redrawActive() {
-    activeLayer.strokeWeight(4);
     RM.drawList();
   }
 
   cnv.keyPressed = function () {
+    const P = CC.mapToTexture(Point.fromMouse(cnv));
     switch (cnv.key) {
       case "a":
-        const P = CC.mapToTexture(Point.fromMouse(cnv));
         RM.initRivetBox(P);
         break;
-
+      case "3":
+        RM.initRivetBox(P, 3);
+        break;
+      case "4":
+        RM.initRivetBox(P, 4);
+        break;
+      case "5":
+        RM.initRivetBox(P, 5);
+        break;
       case "b":
         redrawActive();
         break;
@@ -177,7 +292,7 @@ const minimap = function (cnv) {
 
     cnv.fill("#0000FF40");
     cnv.stroke("#00CCFF");
-    cnv.strokeWeight(2);
+    // cnv.strokeWeight(2);
   };
 
   cnv.mouseDragged = function () {

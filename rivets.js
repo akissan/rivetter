@@ -1,5 +1,6 @@
 import { Point } from "./vectors.js";
 import { createPutCircle, createPutVertex } from "./drawing.js";
+import { getUID } from "./utils.js";
 
 export class RivetBox {
   constructor(cnv) {
@@ -7,10 +8,11 @@ export class RivetBox {
     this.xdiv = 5;
     this.ydiv = 7;
     this.isActive = false;
-    this.id = Math.floor(Math.random() * 10000);
+    this.id = "rb_" + getUID();
     this._boundBox = null;
     this.cnv = cnv;
     this.element = this.initRBElement();
+    this.needsUpdate = false;
   }
 
   initRBElement() {
@@ -47,11 +49,11 @@ export class RivetBox {
   }
 
   isOnscreen(viewportData) {
-    print(
-      `VD: ${JSON.stringify(viewportData)} -> BB: ${JSON.stringify(
-        this._boundBox
-      )}`
-    );
+    // print(
+    //   `VD: ${JSON.stringify(viewportData)} -> BB: ${JSON.stringify(
+    //     this._boundBox
+    //   )}`
+    // );
     if (!this._boundBox) {
       return false;
     }
@@ -64,20 +66,93 @@ export class RivetBox {
     );
   }
 
+  update() {
+    print("updating: ", this.id);
+    this._recalcBoundBox();
+    this.needsUpdate = false;
+  }
+
   drawBoundBox(cnv) {
     const viewportData = cnv.CC.viewport;
     if (!this.isOnscreen(viewportData)) return;
 
     const putVertex = createPutVertex(cnv, viewportData);
 
-    cnv.fill("AA202040");
+    // cnv.fill("AA202040");
+    cnv.fill("#00AA0030");
     cnv.stroke("AA2020");
     cnv.drawingContext.setLineDash([5]);
 
     cnv.beginShape();
     this._boundBox.forEach(putVertex);
-    cnv.endShape();
+    cnv.endShape(cnv.CLOSE);
     cnv.drawingContext.setLineDash([]);
+  }
+
+  calculateRivets(cnv) {
+    const viewportData = cnv.CC.viewport;
+    const putCircle = createPutCircle(cnv, viewportData, 4);
+
+    cnv.noStroke();
+    cnv.fill("white");
+
+    // starts = new Polyline(this.segments.map((s) => s.start));
+    // ends = new Polyline(this.segments.map((s) => s.start));
+
+    let last_divs = null;
+
+    this.segments.forEach((s) => {
+      const divs = [];
+      for (let i = 0; i < 1.01; i += 1 / this.ydiv) {
+        const p = s.lerp(i);
+        divs.push(p);
+        putCircle(p);
+      }
+      if (last_divs) {
+        last_divs.forEach((d, idx) => {
+          for (let i = 0; i < 1.01; i += 1 / this.xdiv) {
+            const p = d.lerpTo(divs[idx], i);
+            putCircle(p);
+          }
+        });
+      }
+      last_divs = divs;
+    });
+
+    // let last_seg_pos;
+    // const delimeters = [0];
+    // const startsLen = this.segments.reduce((acc, seg, idx) => {
+    //   if (idx == 0) {
+    //     last_seg_pos = seg.start;
+    //     return 0;
+    //   } else {
+    //     const len = Math.floor(seg.start.distTo(last_seg_pos));
+    //     const pos = seg.start.getScreenPosition(cnv);
+    //     cnv.text(len, pos.x, pos.y);
+    //     last_seg_pos = seg.start;
+    //     acc += len;
+    //     delimeters.push(acc);
+    //     return acc;
+    //   }
+    // }, 0);
+
+    // for (let dl = 0; dl < startsLen - 1; dl += startsLen / this.xdiv) {
+    //   const seg = delimeters.findIndex((d) => dl < d) - 1;
+    //   const p = this.segments[seg].start.lerpTo(
+    //     this.segments[seg + 1].start,
+    //     (dl - delimeters[seg]) / delimeters[seg + 1]
+    //   );
+    //   putCircle(p);
+    // }
+
+    // for (let dl = 0; dl < startsLen - 1; dl += startsLen / this.xdiv) {
+    //   const seg = delimeters.findIndex((d) => dl < d) - 1;
+    //   const p = this.segments[seg].start.lerpTo(
+    //     this.segments[seg + 1].start,
+    //     (dl - delimeters[seg]) / delimeters[seg + 1]
+    //   );
+    //   putCircle(p);
+    // }
   }
 
   drawSegments(cnv) {
@@ -96,6 +171,7 @@ export class RivetBox {
 
     cnv.stroke("skyblue");
     cnv.beginShape(cnv.LINES);
+    cnv.noFill();
 
     this.segments.forEach((segment) => {
       alternativeOrder.starts.push(segment.start);
@@ -119,7 +195,11 @@ export class RivetBox {
     alternativeOrder.ends.forEach(putVertex);
     cnv.endShape();
 
+    cnv.fill("red");
+    cnv.strokeWeight("1");
     alternativeOrder.all.forEach(putCircle);
+
+    this.calculateRivets(cnv);
   }
 }
 
@@ -127,12 +207,39 @@ export class Segment {
   constructor(startPoint, endPoint) {
     this.start = startPoint;
     this.end = endPoint;
+    this.points = [startPoint, endPoint];
+    this.id = "seg_" + getUID();
+    // this.needsUpdate = false;
+  }
+
+  get length() {
+    return this.start.distTo(this.end);
+  }
+
+  get length2() {
+    return this.start.distTo2(this.end);
+  }
+
+  lerp(val) {
+    return this.start.lerpTo(this.end, val);
   }
 }
 
-// export class RivetBoxElement {
-//   constructor(RivetBox, ) {
-//     this.RivetBox = RivetBox;
+export class Polyline {
+  constructor(points = []) {
+    this.points = points;
+  }
 
-//   }
-// }
+  push(point) {
+    this.points.push(point);
+  }
+
+  get length() {
+    return this.points.reduce(
+      (len, p, idx, pts) => (idx > 0 ? len + p.distTo(pts[idx - 1]) : 0),
+      0
+    );
+  }
+
+  lerp(val) {}
+}
