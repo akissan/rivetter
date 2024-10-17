@@ -1,6 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@v0.169.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@v0.169.0/examples/jsm/"
+        }
+      }
+    </script>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.10.0/p5.min.js"></script>
     <link rel="stylesheet" type="text/css" href="style.css" />
     <meta charset="utf-8" />
@@ -9,10 +18,13 @@
     <main>
       <div id="sidebar">
         <div id="minimap_container"></div>
+        <button class="button important" id="export">Export</button>
+        <div id="global_control"></div>
         <div id="rb_list"></div>
       </div>
       <div id="canvas_container"></div>
     </main>
     <script src="sketch.js" type="module"></script>
+    <script src="preview.js" type="module"></script>
   </body>
 </html>

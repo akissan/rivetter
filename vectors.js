@@ -19,7 +19,7 @@ export class Point {
   }
 
   subVec(vec) {
-    return new Point(this.x + vec.x, this.y + vec.y);
+    return new Point(this.x - vec.x, this.y - vec.y);
   }
 
   distTo2(p) {
@@ -43,8 +43,26 @@ export class RivetControlPoint extends Point {
   constructor(point, parent) {
     super(point.x, point.y);
     this.id = "rcp_" + getUID();
-    this.selected = false;
+    this._selected = false;
     this.parent = parent;
+    this.element = null;
+    this.segment = null;
+  }
+
+  set selected(value) {
+    if (value) {
+      this.parent.select(this);
+      this.element.addClass("selected");
+    } else {
+      this.parent.deselect(this);
+      this.element.removeClass("selected");
+    }
+    this._selected = value;
+    this.segment.selected = value;
+  }
+
+  get selected() {
+    return this._selected;
   }
 
   moveToMouse(cnv) {

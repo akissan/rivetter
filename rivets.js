@@ -5,28 +5,125 @@ import { getUID } from "./utils.js";
 export class RivetBox {
   constructor(cnv) {
     this.segments = [];
-    this.xdiv = 5;
-    this.ydiv = 7;
+    this.xdiv = 20;
+    this.ydiv = 4;
+
+    this.style = "DEFAULT";
+
+    this.xsplit = 5;
+    this.ysplit = 16;
+
     this.isActive = false;
     this.id = "rb_" + getUID();
     this._boundBox = null;
     this.cnv = cnv;
     this.element = this.initRBElement();
+    // this.segMap = new Map();
     this.needsUpdate = false;
+    this._selected = new Set();
+    this._cachedRPs = null;
+  }
+
+  select(element) {
+    this._selected.add(element);
+    this.element.addClass("selected");
+  }
+
+  deselect(element) {
+    this._selected.delete(element);
+    if (!this.selected) {
+      this.element.removeClass("selected");
+    }
+  }
+
+  get selected() {
+    return this._selected.size > 0;
+  }
+
+  initSegElement(seg) {
+    const segElem = this.cnv.createDiv();
+    segElem.addClass("segment");
+    const seglabel = this.cnv.createP(seg.id);
+    seglabel.addClass("seg_label");
+    const segPointContainer = this.cnv.createDiv();
+    segPointContainer.addClass("point_list");
+
+    seg.points.forEach((p) => {
+      const pointElem = this.cnv.createDiv();
+      pointElem.addClass("point");
+      const pointLabel = this.cnv.createP(p.id);
+      pointLabel.addClass("point_label");
+      p.element = pointElem;
+
+      pointLabel.parent(pointElem);
+      pointElem.parent(segPointContainer);
+    });
+
+    seglabel.parent(segElem);
+    segPointContainer.parent(segElem);
+    segElem.parent(this.segList);
+    seg.element = segElem;
   }
 
   initRBElement() {
-    const rbelement = this.cnv.createDiv();
-    const label = this.cnv.createP(this.id);
-    // label.parent
-    label.parent(rbelement);
-    rbelement.parent("rb_list");
+    const rbElem = this.cnv.createDiv();
+    rbElem.addClass("rivetbox");
+    const segList = this.cnv.createDiv();
+    segList.addClass("segment_list");
+    this.segList = segList;
 
-    return rbelement;
+    const rbControl = this.cnv.createDiv();
+    rbControl.addClass("rb_control");
+
+    const rbLabel = this.cnv.createP(this.id);
+    rbLabel.addClass("rb_label");
+
+    const changeXdiv = (event) => {
+      this.xdiv = event.target.valueAsNumber;
+    };
+    const rbXdiv = this.cnv.createInput(this.xdiv, "number");
+    rbXdiv.input(changeXdiv);
+
+    const changeYdiv = (event) => {
+      this.ydiv = event.target.valueAsNumber;
+    };
+    const rbYdiv = this.cnv.createInput(this.ydiv, "number");
+    rbYdiv.input(changeYdiv);
+
+    const changeXsplit = (event) => {
+      this.xsplit = event.target.valueAsNumber;
+    };
+    const rbXsplit = this.cnv.createInput(this.xsplit, "number");
+    rbXsplit.input(changeXsplit);
+
+    const changeYsplit = (event) => {
+      this.ysplit = event.target.valueAsNumber;
+    };
+    const rbYsplit = this.cnv.createInput(this.ysplit, "number");
+    rbYsplit.input(changeYsplit);
+
+    rbLabel.parent(rbElem);
+    rbControl.parent(rbElem);
+    rbYdiv.parent(rbControl);
+    rbXdiv.parent(rbControl);
+    rbYsplit.parent(rbControl);
+    rbXsplit.parent(rbControl);
+    segList.parent(rbElem);
+    rbElem.parent("rb_list");
+
+    rbElem.elt.addEventListener("click", () => {
+      print(this);
+    });
+
+    return rbElem;
   }
 
   addSegment(startPoint, endPoint) {
-    this.segments.push(new Segment(startPoint, endPoint));
+    const segment = new Segment(startPoint, endPoint);
+    startPoint.segment = segment;
+    endPoint.segment = segment;
+    this.segments.push(segment);
+    this.initSegElement(segment);
     this._recalcBoundBox();
   }
 
@@ -49,11 +146,6 @@ export class RivetBox {
   }
 
   isOnscreen(viewportData) {
-    // print(
-    //   `VD: ${JSON.stringify(viewportData)} -> BB: ${JSON.stringify(
-    //     this._boundBox
-    //   )}`
-    // );
     if (!this._boundBox) {
       return false;
     }
@@ -67,7 +159,7 @@ export class RivetBox {
   }
 
   update() {
-    print("updating: ", this.id);
+    // print("updating: ", this.id);
     this._recalcBoundBox();
     this.needsUpdate = false;
   }
@@ -89,15 +181,14 @@ export class RivetBox {
     cnv.drawingContext.setLineDash([]);
   }
 
-  calculateRivets(cnv) {
+  calculateRivets(cnv = this.cnv) {
+    const rivetPositions = [];
+
     const viewportData = cnv.CC.viewport;
     const putCircle = createPutCircle(cnv, viewportData, 4);
 
     cnv.noStroke();
     cnv.fill("white");
-
-    // starts = new Polyline(this.segments.map((s) => s.start));
-    // ends = new Polyline(this.segments.map((s) => s.start));
 
     let last_divs = null;
 
@@ -107,52 +198,42 @@ export class RivetBox {
         const p = s.lerp(i);
         divs.push(p);
         putCircle(p);
+        rivetPositions.push(p);
       }
       if (last_divs) {
         last_divs.forEach((d, idx) => {
           for (let i = 0; i < 1.01; i += 1 / this.xdiv) {
             const p = d.lerpTo(divs[idx], i);
             putCircle(p);
+            rivetPositions.push(p);
           }
         });
       }
       last_divs = divs;
     });
 
-    // let last_seg_pos;
-    // const delimeters = [0];
-    // const startsLen = this.segments.reduce((acc, seg, idx) => {
-    //   if (idx == 0) {
-    //     last_seg_pos = seg.start;
-    //     return 0;
-    //   } else {
-    //     const len = Math.floor(seg.start.distTo(last_seg_pos));
-    //     const pos = seg.start.getScreenPosition(cnv);
-    //     cnv.text(len, pos.x, pos.y);
-    //     last_seg_pos = seg.start;
-    //     acc += len;
-    //     delimeters.push(acc);
-    //     return acc;
-    //   }
-    // }, 0);
+    const starts = new Polyline(this.segments.map((s) => s.start)).split(
+      this.xsplit
+    );
+    const ends = new Polyline(this.segments.map((s) => s.end)).split(
+      this.xsplit
+    );
 
-    // for (let dl = 0; dl < startsLen - 1; dl += startsLen / this.xdiv) {
-    //   const seg = delimeters.findIndex((d) => dl < d) - 1;
-    //   const p = this.segments[seg].start.lerpTo(
-    //     this.segments[seg + 1].start,
-    //     (dl - delimeters[seg]) / delimeters[seg + 1]
-    //   );
-    //   putCircle(p);
-    // }
+    starts.forEach((start, idx) => {
+      for (let i = 0; i < 1.01; i += 1 / this.ysplit) {
+        const p = start.lerpTo(ends[idx], i);
+        putCircle(p);
+        rivetPositions.push(p);
+      }
+    });
+    this._cachedRPs = rivetPositions;
+  }
 
-    // for (let dl = 0; dl < startsLen - 1; dl += startsLen / this.xdiv) {
-    //   const seg = delimeters.findIndex((d) => dl < d) - 1;
-    //   const p = this.segments[seg].start.lerpTo(
-    //     this.segments[seg + 1].start,
-    //     (dl - delimeters[seg]) / delimeters[seg + 1]
-    //   );
-    //   putCircle(p);
-    // }
+  get rivetPositions() {
+    if (!this._cachedRPs) {
+      this.calculateRivets();
+    }
+    return this._cachedRPs;
   }
 
   drawSegments(cnv) {
@@ -209,7 +290,25 @@ export class Segment {
     this.end = endPoint;
     this.points = [startPoint, endPoint];
     this.id = "seg_" + getUID();
+    this.element = null;
+    this._selected = false;
     // this.needsUpdate = false;
+  }
+
+  set selected(value) {
+    if (value) {
+      this._selected = true;
+      this.element.addClass("selected");
+    } else {
+      if (!this.start.selected && !this.end.selected) {
+        this.element.removeClass("selected");
+        this._selected = false;
+      }
+    }
+  }
+
+  get selected() {
+    return this._selected;
   }
 
   get length() {
@@ -225,20 +324,77 @@ export class Segment {
   }
 }
 
+class Line {
+  constructor(start, end) {
+    this.start = start;
+    this.end = end;
+  }
+
+  get length() {
+    return this.start.distTo(this.end);
+  }
+}
+
 export class Polyline {
   constructor(points = []) {
     this.points = points;
+    this.lines = [];
+
+    if (points.length > 1) {
+      points.forEach((p, idx, pts) => {
+        if (idx > 0) {
+          this.lines.push(new Line(pts[idx - 1], p));
+        }
+      });
+    }
   }
 
   push(point) {
+    if (this.points.length > 0) {
+      const last_p = this.points[this.points.length - 1];
+      this.lines.push(new Line(last_p, point));
+    }
     this.points.push(point);
   }
 
   get length() {
-    return this.points.reduce(
-      (len, p, idx, pts) => (idx > 0 ? len + p.distTo(pts[idx - 1]) : 0),
+    return this.lines.reduce(
+      (acc, line) => acc + line.length,
+      // (len, p, idx, pts) => (idx > 0 ? len + p.distTo(pts[idx - 1]) : 0),
       0
     );
+  }
+
+  split(n) {
+    const resultPoints = [];
+    const polylineLen = this.length;
+    const delta = polylineLen / n;
+
+    let traveled = 0;
+    let lastLen = 0;
+
+    // print(delta);
+
+    // current_seg = 0;
+    let lineIdx = 0;
+    let curLine = this.lines[lineIdx];
+
+    // current_seg_len
+    while (traveled < polylineLen + 0.05) {
+      const t = (traveled - lastLen) / curLine.length;
+      const p = curLine.start.lerpTo(curLine.end, t);
+      resultPoints.push(p);
+      traveled += delta;
+
+      if (traveled > lastLen + curLine.length && traveled < polylineLen) {
+        lastLen += curLine.length;
+        lineIdx += 1;
+        curLine = this.lines[lineIdx];
+        print(lineIdx);
+      }
+    }
+
+    return resultPoints;
   }
 
   lerp(val) {}

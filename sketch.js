@@ -1,9 +1,21 @@
 import { RivetBox } from "./rivets.js";
 import { Point, RivetControlPoint, Vector } from "./vectors.js";
 import { isMouseInBox } from "./utils.js";
+import { addToDom, change2CompassTexture } from "./preview.js";
 
 let compass_base;
 const canvasSize = window.innerHeight - 20;
+window.canvasSize = canvasSize;
+
+let offscreen;
+let rivetImage;
+
+const rivetStyles = {
+  DEFAULT: {
+    img: rivetImage,
+    size: 4,
+  },
+};
 
 const textureSize = 2048;
 
@@ -87,7 +99,9 @@ class RivetManager {
 
     this.rivetboxes.forEach((RB) => {
       if (RB.needsUpdate) RB.update();
-      RB.drawBoundBox(this.mainCanvas);
+      if (window.globals.drawBoundBoxes) {
+        RB.drawBoundBox(this.mainCanvas);
+      }
       RB.drawSegments(this.mainCanvas);
     });
   }
@@ -151,6 +165,9 @@ class SelectionCandidate {
 const maincnv = function (cnv) {
   cnv.preload = function () {
     compass_base = cnv.loadImage("cbt.png");
+    rivetImage = cnv.loadImage("rivets/default.png");
+
+    rivetStyles["DEFAULT"].img = rivetImage;
   };
 
   cnv.mousePressed = function () {
@@ -188,6 +205,8 @@ const maincnv = function (cnv) {
         //   } - ${selection_candidate.dist}`
         // );
         mouseMode = MOUSE_MODE_POINT_DRAG;
+      } else {
+        selection.unselectAll();
       }
     }
   };
@@ -208,9 +227,65 @@ const maincnv = function (cnv) {
     }
   };
 
+  function updateOffscreen() {
+    offscreen.clear();
+    // offscreen.background("red");
+
+    if (window.globals.exportWithBase) {
+      offscreen.image(compass_base, 0, 0, textureSize, textureSize);
+    }
+
+    cnv.imageMode(cnv.CENTER);
+    RM.rivetboxes.forEach(({ rivetPositions, style }) => {
+      for (const { x, y } of rivetPositions) {
+        offscreen.image(
+          rivetStyles[style].img,
+          x,
+          y,
+          rivetStyles[style].size,
+          rivetStyles[style].size
+        );
+      }
+    });
+    cnv.imageMode(cnv.CORNER);
+
+    return offscreen;
+  }
+
   cnv.setup = function () {
+    offscreen = cnv.createGraphics(textureSize, textureSize);
+    // offscreen.id("offscreen");
+    // print(offscreen);
+    change2CompassTexture(offscreen);
+    // window.offscreen = offscreen;
+
+    window.globals = {
+      drawBoundBoxes: false,
+      exportWithBase: false,
+    };
+    const drawBoundBoxesCB = cnv.createCheckbox(
+      "Draw bound boxes",
+      window.globals.drawBoundBoxes
+    );
+    const drawBoundBoxesInp = (event) => {
+      window.globals.drawBoundBoxes = event.target.checked;
+    };
+    drawBoundBoxesCB.input(drawBoundBoxesInp);
+    drawBoundBoxesCB.parent("global_control");
+
+    const exportWithBaseCB = cnv.createCheckbox(
+      "Export with base",
+      window.globals.exportWithBase
+    );
+    const exportWithBaseInp = (event) => {
+      window.globals.exportWithBase = event.target.checked;
+    };
+    exportWithBaseCB.input(exportWithBaseInp);
+    exportWithBaseCB.parent("global_control");
+
     const mainCanvas = cnv.createCanvas(canvasSize, canvasSize);
     mainCanvas.parent("canvas_container");
+    addToDom(canvasSize);
     frozenLayer = cnv.createGraphics(textureSize, textureSize);
     activeLayer = cnv.createGraphics(textureSize, textureSize);
     activeLayer.strokeWeight("2");
@@ -222,6 +297,13 @@ const maincnv = function (cnv) {
     cnv.textSize(16);
 
     RM.initRivetBox(new Point(300, 300));
+
+    function exportTexture() {
+      // const exportLayer = cnv.createGraphics(textureSize, textureSize);
+      cnv.save(updateOffscreen());
+    }
+
+    document.getElementById("export").addEventListener("click", exportTexture);
     // redrawActive();
   };
 
@@ -235,10 +317,42 @@ const maincnv = function (cnv) {
     RM.drawList();
   }
 
+  function extentRivetBox() {
+    if (mouseMode === MOUSE_MODE_DEFAULT) {
+      if (selection.preview()) {
+        const p = selection.preview();
+        // const seg = p.segment;
+        const rb = p.parent;
+
+        const last_seg = rb.segments[rb.segments.length - 1];
+        const prev_seg = rb.segments[rb.segments.length - 2];
+
+        if (!last_seg || !prev_seg)
+          throw new Error("Extending RB went wrong, not enough segments");
+
+        const v1 = last_seg.start.subVec(prev_seg.start);
+        const v2 = last_seg.end.subVec(prev_seg.end);
+
+        const p1 = last_seg.start.addVec(v1);
+        const p2 = last_seg.end.addVec(v2);
+
+        const rp1 = new RivetControlPoint(p1, rb);
+        const rp2 = new RivetControlPoint(p2, rb);
+
+        rb.addSegment(rp1, rp2);
+      } else {
+        print("Select RivetBox for extension");
+      }
+    }
+  }
+
   cnv.keyPressed = function () {
     const P = CC.mapToTexture(Point.fromMouse(cnv));
     switch (cnv.key) {
       case "a":
+        extentRivetBox(P);
+        break;
+      case "2":
         RM.initRivetBox(P);
         break;
       case "3":
@@ -270,6 +384,8 @@ const maincnv = function (cnv) {
 
     cnv.strokeWeight(2);
     redrawActive();
+
+    updateOffscreen();
 
     const end_timing = cnv.millis();
     cnv.text(`${end_timing - start_timing}`, canvasSize, 10);
@@ -328,6 +444,8 @@ const minimap = function (cnv) {
   };
 
   cnv.mouseWheel = function (event) {
+    if (!isMouseInBox(cnv, mapSize)) return;
+
     if (event.delta > 0) {
       CC.zoom += 25;
     } else {

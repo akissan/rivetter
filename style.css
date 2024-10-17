@@ -2,16 +2,122 @@ html,
 body {
   margin: 0;
   padding: 0;
+  --clr-bcg: #1a1d1f;
+  --clr-fg: #2b3035;
+  --clr-main: #a9aaac;
+  --clr-accent: #177cff;
+  --clr-selection: #aeff6b;
+  --clr-selection-alt: #88b165;
+  --default-fonts: "Consolas", "Courier", monospace;
+  font-family: var(--default-fonts);
+  /* --clr- */
 }
 
 main {
   display: flex;
+  max-height: 100vh;
+}
+
+.button {
+  font-family: var(--default-fonts);
+  padding: 12px;
+  border-radius: 4px;
+  /* border: none */
+
+  &.important {
+    border: 1px solid var(--clr-accent);
+    background-color: var(--clr-accent);
+    color: white;
+    font-weight: bolder;
+  }
 }
 
 #sidebar {
+  display: flex;
+  flex-direction: column;
   padding: 24px;
+  max-height: 100vh;
+  background-color: var(--clr-bcg);
+}
+
+#rb_list {
+  overflow-x: hidden;
+  overflow-y: auto;
+  flex-grow: 1;
 }
 
 #canvas_container {
+  display: flex;
+  /* flex-direction: row-reverse; */
   flex-grow: 1;
+}
+
+#global_control {
+  /* padding: 4px; */
+  margin: 8px 0;
+
+  input {
+    margin: 0;
+  }
+
+  span {
+    color: var(--clr-main);
+    margin-left: 4px;
+  }
+}
+
+.rivetbox {
+  margin-bottom: 8px;
+  color: var(--clr-main);
+  border-radius: 4px;
+  background-color: var(--clr-fg);
+  /* border: 1px solid gray; */
+  padding: 4px;
+
+  p {
+    margin: 2px;
+  }
+
+  &.selected {
+    .rb_label {
+      color: var(--clr-selection-alt);
+    }
+  }
+
+  .rb_control {
+    display: grid;
+    /* grid-template-columns: 1fr 1fr; */
+    /* grid-template-rows: auto; */
+    gap: 2px;
+
+    input {
+      font-family: var(--default-fonts);
+      background-color: transparent;
+      color: var(--clr-main);
+      border-radius: 4px;
+      border: 1px solid var(--clr-main);
+      padding: 4px;
+      /* padding-left: 4px; */
+    }
+  }
+
+  .segment {
+    margin-left: 4px;
+
+    &.selected {
+      .seg_label {
+        color: var(--clr-selection-alt);
+      }
+    }
+
+    .point {
+      margin-left: 8px;
+
+      &.selected {
+        .point_label {
+          color: var(--clr-selection);
+        }
+      }
+    }
+  }
 }
